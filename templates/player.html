@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>History Bee - Player {{ player_key }}</title>
+</head>
+<body>
+    <h1>Player {{ player_key }} Interface</h1>
+    <div>
+        <label>Your Name: <input type="text" id="player_name"></label>
+        <button onclick="setPlayerName()">Set Name</button>
+    </div>
+    <br>
+    <div>
+        <label>Your Response: <input type="text" id="response" size="50"></label><br>
+        <button onclick="submitResponse()">Submit Response</button>
+        <div id="response_status"></div>
+    </div>
+    <br>
+    <h2>Current Question</h2>
+    <div id="current_question" style="font-weight: bold; font-size: 18px;"></div>
+    <br>
+    <h2>Scores</h2>
+    <div id="scores"></div>
+    <br>
+    <h2>Game Status</h2>
+    <div id="game_status"></div>
+
+    <script>
+        const playerKey = '{{ player_key }}';
+
+        async function setPlayerName() {
+            const player_name = document.getElementById('player_name').value;
+            if (!player_name.trim()) return;
+            
+            const data = {};
+            data[playerKey.toLowerCase() + '_name'] = player_name;
+            
+            try {
+                await fetch('/set_names', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                document.getElementById('response_status').innerHTML = '<span style="color: green;">Name set successfully!</span>';
+                updateState();
+            } catch (error) {
+                document.getElementById('response_status').innerHTML = '<span style="color: red;">Error setting name</span>';
+            }
+        }
+
+        async function submitResponse() {
+            const response = document.getElementById('response').value;
+            if (!response.trim()) return;
+            
+            try {
+                const result = await fetch('/submit_response', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        player_key: playerKey,
+                        response: response
+                    })
+                });
+                
+                const data = await result.json();
+                if (data.status === 'ok') {
+                    document.getElementById('response').value = '';
+                    document.getElementById('response_status').innerHTML = '<span style="color: green;">Response submitted!</span>';
+                } else {
+                    document.getElementById('response_status').innerHTML = '<span style="color: red;">Failed to submit response</span>';
+                }
+                updateState();
+            } catch (error) {
+                document.getElementById('response_status').innerHTML = '<span style="color: red;">Error submitting response</span>';
+                console.error('Error:', error);
+            }
+        }
+
+        async function updateState() {
+            try {
+                const response = await fetch('/get_state');
+                const state = await response.json();
+                
+                document.getElementById('current_question').innerText = state.current_question || 'No question yet';
+                document.getElementById('scores').innerHTML = `
+                    <strong>P1 (${state.players.P1.name || 'P1'}): ${state.players.P1.score} points</strong><br>
+                    <strong>P2 (${state.players.P2.name || 'P2'}): ${state.players.P2.score} points</strong>
+                `;
+                
+                let status = `Attempts: ${state.attempts}/${state.max_attempts}`;
+                if (state.correct_answer_given) {
+                    status += ' - Question answered correctly!';
+                } else if (state.attempts >= state.max_attempts) {
+                    status += ' - Maximum attempts reached';
+                }
+                document.getElementById('game_status').innerText = status;
+                
+                // Clear status message after 3 seconds
+                setTimeout(() => {
+                    document.getElementById('response_status').innerHTML = '';
+                }, 3000);
+                
+            } catch (error) {
+                console.error('Error updating state:', error);
+            }
+        }
+
+        // Allow Enter key to submit response
+        document.getElementById('response').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                submitResponse();
+            }
+        });
+
+        setInterval(updateState, 1000);
+        updateState();
+    </script>
+</body>
+</html>

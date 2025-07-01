@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>History Bee - Judge</title>
+</head>
+<body>
+    <h1>Judge Interface</h1>
+    <div>
+        <label>Judge Name: <input type="text" id="judge_name" value="Judge"></label><br>
+        <label>Player 1 Name: <input type="text" id="p1_name"></label><br>
+        <label>Player 2 Name: <input type="text" id="p2_name"></label><br>
+        <label>Starting Points (N): <input type="number" id="starting_points" value="0"></label><br>
+        <button onclick="setNames()">Set Names and Points</button>
+    </div>
+    <br>
+    <div>
+        <label>Question: <input type="text" id="question" size="50"></label><br>
+        <button onclick="sendQuestion()">Send Question</button>
+    </div>
+    <br>
+    <div>
+        <button onclick="restartGame()">Restart Game</button>
+    </div>
+    <br>
+    <div>Current Time: <span id="current_time">0</span> seconds</div>
+    <br>
+    
+    <h2>Pending Responses (Click to Judge)</h2>
+    <div id="pending_responses"></div>
+    <br>
+    
+    <h2>Game Log</h2>
+    <textarea id="log" rows="15" cols="80" readonly></textarea>
+    <h2>Scores</h2>
+    <div id="scores"></div>
+
+    <script>
+        async function setNames() {
+            const p1_name = document.getElementById('p1_name').value;
+            const p2_name = document.getElementById('p2_name').value;
+            const judge_name = document.getElementById('judge_name').value;
+            const N = parseInt(document.getElementById('starting_points').value);
+            await fetch('/set_names', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({p1_name, p2_name, judge_name, N})
+            });
+            updateState();
+        }
+
+        async function sendQuestion() {
+            const question = document.getElementById('question').value;
+            if (!question.trim()) return;
+            await fetch('/set_question', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({question})
+            });
+            document.getElementById('question').value = '';
+            updateState();
+        }
+
+        async function judgeResponse(responseIndex, isCorrect) {
+            await fetch('/judge_response', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({response_index: responseIndex, is_correct: isCorrect})
+            });
+            updateState();
+        }
+
+        async function restartGame() {
+            await fetch('/restart', {method: 'POST'});
+            updateState();
+        }
+
+        async function updateState() {
+            try {
+                const response = await fetch('/get_state');
+                const state = await response.json();
+                
+                // Update log
+                const log = state.responses.map(r => `[${r[0]}, ${r[1]}] ${r[2]}`).join('\n');
+                document.getElementById('log').value = log;
+                
+                // Update current time
+                document.getElementById('current_time').innerText = state.current_time;
+                
+                // Update scores
+                document.getElementById('scores').innerHTML = `
+                    <strong>P1 (${state.players.P1.name || 'P1'}): ${state.players.P1.score} points</strong><br>
+                    <strong>P2 (${state.players.P2.name || 'P2'}): ${state.players.P2.score} points</strong>
+                `;
+                
+                // Update pending responses
+                let pendingHtml = '';
+                if (state.pending_responses && state.pending_responses.length > 0) {
+                    state.pending_responses.forEach((resp, index) => {
+                        const playerName = state.players[resp.player_key].name || resp.player_key;
+                        pendingHtml += `
+                            <div style="border: 1px solid #ccc; padding: 10px; margin: 5px;">
+                                <strong>${playerName}</strong>: ${resp.response}<br>
+                                <button onclick="judgeResponse(${index}, true)" style="background: green; color: white;">CORRECT</button>
+                                <button onclick="judgeResponse(${index}, false)" style="background: red; color: white;">INCORRECT</button>
+                            </div>
+                        `;
+                    });
+                } else {
+                    pendingHtml = '<em>No pending responses</em>';
+                }
+                document.getElementById('pending_responses').innerHTML = pendingHtml;
+                
+            } catch (error) {
+                console.error('Error updating state:', error);
+            }
+        }
+
+        setInterval(updateState, 1000);
+        updateState();
+    </script>
+</body>
+</html>
